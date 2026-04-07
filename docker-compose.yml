@@ -1,0 +1,114 @@
+# docker-compose.yml
+#
+# Docker Compose is a tool that lets you define and run multiple containers
+# together. Instead of starting Postgres, Temporal, and your API separately,
+# one command ("docker compose up") starts them all and wires them together
+# on a private network so they can talk to each other by service name.
+#
+# The services below are:
+#   postgres     — the database (stores our app data later, and Temporal's internal state)
+#   temporal     — the workflow engine (explained more in dummy.py)
+#   temporal-ui  — a web dashboard so you can SEE workflows running (localhost:8080)
+#   api          — our FastAPI server (localhost:8000)
+#   worker       — the process that actually EXECUTES Temporal workflows
+
+services:
+
+  # ── Postgres ────────────────────────────────────────────────────────────────
+  # A relational database. We use the pgvector variant because later we'll
+  # store vector embeddings (arrays of numbers representing code meaning) in it.
+  # For M1 we don't touch it directly — Temporal uses it to store its own state.
+  postgres:
+    image: pgvector/pgvector:pg16          # pg16 = PostgreSQL v16 with pgvector extension
+    environment:
+      POSTGRES_USER: postgres              # superuser account Temporal will use
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: onboard                 # our app's database (used from M2 onward)
+    ports:
+      - "5432:5432"                        # expose to host so you can inspect with psql/TablePlus
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # persist data across restarts
+    healthcheck:
+      # pg_isready is a built-in Postgres tool — returns 0 when the server is accepting connections
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Temporal ─────────────────────────────────────────────────────────────────
+  # Temporal is a "workflow engine" — it runs long-running, durable processes.
+  # "Durable" means: if the server crashes mid-workflow, Temporal replays the
+  # workflow from where it left off when it comes back up. This is what makes
+  # human-in-the-loop pauses possible in M6.
+  #
+  # temporalio/auto-setup automatically creates the database tables Temporal needs
+  # inside Postgres (it creates two databases: "temporal" and "temporal_visibility").
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=postgres12            # tell Temporal to use Postgres (not SQLite). Must be "postgres12" not "postgresql"
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres  # "postgres" = the hostname of our postgres service above
+    ports:
+      - "7233:7233"              # gRPC port — our Python code connects here
+    depends_on:
+      postgres:
+        condition: service_healthy  # don't start until Postgres is ready
+    restart: on-failure
+
+  # ── Temporal UI ───────────────────────────────────────────────────────────────
+  # A web interface for Temporal. Go to http://localhost:8080 after starting
+  # to see all running/completed workflows, their inputs, outputs, and history.
+  # Extremely useful for debugging.
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233  # "temporal" = hostname of our temporal service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - temporal
+
+  # ── FastAPI (our HTTP server) ────────────────────────────────────────────────
+  # FastAPI is a Python web framework. It listens for HTTP requests (like
+  # POST /query) and responds. It does NOT run workflows itself — it just
+  # tells Temporal "start this workflow" and waits for the result.
+  api:
+    build: .                             # build from our Dockerfile in this directory
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    #         ^uvicorn is the server     ^our app  ^listen on all interfaces  ^auto-reload on file changes
+    ports:
+      - "8000:8000"
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/onboard
+    depends_on:
+      - temporal
+    volumes:
+      - .:/app   # mount our local code into the container so --reload works
+    restart: on-failure
+
+  # ── Temporal Worker ───────────────────────────────────────────────────────────
+  # The worker is a separate Python process that polls Temporal for tasks.
+  # When Temporal has a workflow to run, it sends tasks to this worker.
+  # The worker executes the actual Python functions (activities + workflows)
+  # and reports results back to Temporal.
+  #
+  # Why separate from the API? The API handles HTTP requests. The worker handles
+  # workflow execution. Keeping them separate lets you scale them independently.
+  worker:
+    build: .
+    command: python -m api.worker
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/onboard
+    depends_on:
+      - temporal
+    volumes:
+      - .:/app
+    restart: on-failure
+
+volumes:
+  postgres_data:   # named volume — Docker manages this on disk, persists between "docker compose down/up"

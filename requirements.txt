@@ -1,0 +1,32 @@
+# requirements.txt
+#
+# Lists every Python package this project needs. "pip install -r requirements.txt"
+# installs all of them. Pinning versions (==) ensures everyone gets the same
+# behavior — an unpinned package might update and break something silently.
+
+fastapi==0.115.5
+# FastAPI: the web framework. Handles routing (which URL calls which function),
+# request parsing, and response serialization.
+
+uvicorn[standard]==0.32.1
+# Uvicorn: the ASGI server that actually runs FastAPI. FastAPI defines the app;
+# uvicorn is the process that listens on a port and hands requests to it.
+# [standard] adds websocket support and faster performance extras.
+
+temporalio==1.7.1
+# The official Temporal Python SDK. Gives us:
+#   - Client: to start/query workflows from FastAPI
+#   - Worker: to run workflows and activities
+#   - @workflow.defn / @activity.defn decorators
+
+pydantic==2.10.3
+# Data validation library. FastAPI uses it to validate request/response bodies.
+# You define a class with typed fields, Pydantic checks inputs match those types.
+
+psycopg[binary]==3.2.3
+# PostgreSQL driver for Python. Lets Python talk to Postgres.
+# Not used in M1 but installed now so the image is ready for M2.
+
+python-dotenv==1.0.1
+# Loads .env files into environment variables.
+# Lets you keep secrets (API keys, DB passwords) out of code.
