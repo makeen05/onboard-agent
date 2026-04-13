@@ -45,12 +45,45 @@ async def ensure_repo_indexed(repo_url: str) -> RepoInfo:
 @activity.defn
 async def route_query(question: str) -> str:
     """
-    Router agent picks a specialist.
-    M3: always returns "explorer".
-    M4+: replace with LLM classification.
+    Router: classifies the question and picks a specialist agent.
+    Uses GPT-4o-mini for fast, cheap classification.
+
+    - "where is X?" / "find X" → explorer
+    - "explain X" / "how does X work?" → explainer
     """
-    activity.logger.info(f"Routing: {question[:80]}...")
-    return "explorer"
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Classify this question about a codebase. "
+                    "Reply with exactly one word: explorer or explainer.\n\n"
+                    "explorer = finding or locating things "
+                    "(where, which file, find, locate, show me)\n"
+                    "explainer = understanding or explaining things "
+                    "(explain, how, what, why, describe, walk me through)"
+                ),
+            },
+            {"role": "user", "content": question},
+        ],
+        max_tokens=10,
+    )
+
+    answer = (response.choices[0].message.content or "").strip().lower()
+
+    # Parse — default to explainer if unclear
+    if "explorer" in answer:
+        agent = "explorer"
+    else:
+        agent = "explainer"
+
+    activity.logger.info(f"Routed '{question[:60]}...' -> {agent}")
+    return agent
 
 
 @activity.defn
@@ -59,6 +92,14 @@ async def answer_with_specialist(input: SpecialistInput) -> str:
     if input.agent == "explorer":
         from api.agents.explorer import run_explorer
         return await run_explorer(
+            question=input.question,
+            repo_dir=input.clone_path,
+            repo_url=input.repo_url,
+        )
+
+    if input.agent == "explainer":
+        from api.agents.explainer import run_explainer
+        return await run_explainer(
             question=input.question,
             repo_dir=input.clone_path,
             repo_url=input.repo_url,

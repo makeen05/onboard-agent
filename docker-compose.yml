@@ -113,6 +113,22 @@ services:
       - repo_clones:/tmp    # persist cloned repos so file tools work across restarts
     restart: on-failure
 
+  # ── Next.js Frontend ──────────────────────────────────────────────────────
+  # The chat UI. Runs on port 3000. Talks to the FastAPI backend on port 8000.
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ./web:/app
+      - /app/node_modules    # don't overwrite container node_modules with host
+      - /app/.next           # don't overwrite .next build cache
+    restart: on-failure
+
 volumes:
   postgres_data:   # named volume — Docker manages this on disk, persists between "docker compose down/up"
   repo_clones:     # persists cloned repos so the agent's file tools can access them

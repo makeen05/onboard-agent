@@ -13,6 +13,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from temporalio.client import Client
 
@@ -36,7 +37,15 @@ async def lifespan(app: FastAPI):
     await close_pool()  # clean up on shutdown
 
 
-app = FastAPI(title="Onboard Agent API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Onboard Agent API", version="0.3.0", lifespan=lifespan)
+
+# Allow the Next.js frontend to call the API from the browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # fine for local dev; lock down in production
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ── Request / Response models ──────────────────────────────────────────────────
@@ -83,6 +92,20 @@ class SearchResponse(BaseModel):
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/repos")
+async def list_repos() -> list[dict]:
+    """Return all indexed repos (for the sidebar)."""
+    async with get_conn() as conn:
+        rows = await conn.execute(
+            "SELECT id, repo_url, indexed_at FROM repos ORDER BY indexed_at DESC"
+        )
+        rows = await rows.fetchall()
+    return [
+        {"id": row["id"], "repo_url": row["repo_url"], "indexed_at": str(row["indexed_at"])}
+        for row in rows
+    ]
 
 
 @app.post("/query", response_model=QueryResponse)
