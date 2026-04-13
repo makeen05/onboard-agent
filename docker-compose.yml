@@ -84,6 +84,7 @@ services:
     environment:
       - TEMPORAL_HOST=temporal:7233
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/onboard
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - temporal
     volumes:
@@ -104,11 +105,14 @@ services:
     environment:
       - TEMPORAL_HOST=temporal:7233
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/onboard
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - temporal
     volumes:
       - .:/app
+      - repo_clones:/tmp    # persist cloned repos so file tools work across restarts
     restart: on-failure
 
 volumes:
   postgres_data:   # named volume — Docker manages this on disk, persists between "docker compose down/up"
+  repo_clones:     # persists cloned repos so the agent's file tools can access them

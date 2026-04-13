@@ -15,6 +15,12 @@ WORKDIR /app
 # All subsequent commands run relative to /app inside the container.
 # Think of it like "cd /app" that persists.
 
+# Install system dependencies.
+# apt-get is the package manager for Debian/Ubuntu Linux (which slim is based on).
+# git is needed by gitpython — it's a Python wrapper around the git CLI binary,
+# not a pure Python implementation. No git binary = it can't clone anything.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 # Install Python dependencies first (before copying our code).

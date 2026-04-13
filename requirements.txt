@@ -1,32 +1,31 @@
 # requirements.txt
-#
-# Lists every Python package this project needs. "pip install -r requirements.txt"
-# installs all of them. Pinning versions (==) ensures everyone gets the same
-# behavior — an unpinned package might update and break something silently.
 
-fastapi==0.115.5
-# FastAPI: the web framework. Handles routing (which URL calls which function),
-# request parsing, and response serialization.
+fastapi>=0.115.5
+uvicorn[standard]>=0.32.1
+temporalio>=1.7.1
+pydantic>=2.12.2
+python-dotenv>=1.0.1
 
-uvicorn[standard]==0.32.1
-# Uvicorn: the ASGI server that actually runs FastAPI. FastAPI defines the app;
-# uvicorn is the process that listens on a port and hands requests to it.
-# [standard] adds websocket support and faster performance extras.
-
-temporalio==1.7.1
-# The official Temporal Python SDK. Gives us:
-#   - Client: to start/query workflows from FastAPI
-#   - Worker: to run workflows and activities
-#   - @workflow.defn / @activity.defn decorators
-
-pydantic==2.10.3
-# Data validation library. FastAPI uses it to validate request/response bodies.
-# You define a class with typed fields, Pydantic checks inputs match those types.
-
+# Database
 psycopg[binary]==3.2.3
-# PostgreSQL driver for Python. Lets Python talk to Postgres.
-# Not used in M1 but installed now so the image is ready for M2.
+psycopg-pool==3.2.3
+# psycopg-pool manages a pool of reusable Postgres connections so we don't
+# open a new connection for every query.
 
-python-dotenv==1.0.1
-# Loads .env files into environment variables.
-# Lets you keep secrets (API keys, DB passwords) out of code.
+# Repo cloning
+gitpython==3.1.43
+# Python wrapper around git. Lets us run "git clone" from Python code.
+
+# Code parsing / chunking
+tree-sitter==0.23.2
+tree-sitter-python==0.23.4
+# tree-sitter parses source code into a syntax tree so we can extract
+# functions and classes as individual chunks instead of splitting by line count.
+# tree-sitter-python is the language pack for Python files.
+# Add more language packs (tree-sitter-javascript etc.) later for broader support.
+
+# OpenAI Agents SDK — multi-agent framework (pulls in openai>=2.26 as a dependency)
+openai-agents>=0.13.0
+# Used for:
+#   - Explorer agent with file tools (M3)
+#   - Router + specialist handoffs (M5+)
